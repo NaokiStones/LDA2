@@ -5,6 +5,7 @@ import java.util.Arrays;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.xml.parsers.DocumentBuilder;
 
 import org.apache.commons.math3.distribution.GammaDistribution;
 import org.apache.commons.math3.special.Gamma;
@@ -99,7 +100,6 @@ public class OnlineLDA {
 					tmpCnt++;
 					vocabulary.put(tmpString, tmpCnt);
 				}
-				
 			}
 			tmpVocabularyPerDoc.add(tmpVocabulary_Doc);
 		}
@@ -122,7 +122,44 @@ public class OnlineLDA {
 		
 		for(int d=0; d<D_; d++){
 			String[] ids = wordids[d];
+			double[] cts = wordcts[d];
+
+			double[] gammad = gamma_[d];
+			double[] Elogthetad = ElogTheta[d];
+			double[] expElogthetad = expElogTheta[d];
+			double[][] expElogbetad = getElogbetad(ids);
+			
+			double[] phinorm = dot(expElogthetad, expElogbetad);
+			
+			
 		}
+	}
+	
+	private double[] dot(double[] expElogthetad, double[][] expElogbetad) {
+		int wordSize = expElogbetad[0].length;
+		double[] ret = new double[wordSize];
+		for(int w=0, Nd=wordSize; w<Nd; w++){
+			double tmp = 0;
+			for(int k=0; k<K_; k++){
+				tmp += expElogthetad[k] * expElogbetad[k][w];
+			}
+			ret[w] = tmp;
+		}
+		return ret;
+	}
+
+	private double[][] getElogbetad(String[] ids) {
+		// returns K * Nd matrix
+		int SIZE = ids.length;
+		double[][] ret = new double[K_][SIZE];
+		int tmpIdx = 0;
+		for(String tmpStr:ids){
+			for(int k=0; k<K_; k++){
+				ret[k][tmpIdx] = ElogBeta.get(tmpStr)[k];
+			}
+			tmpIdx++;
+		}
+		return ret;
 	}
 
 	private void getWordidsAndCts() {
@@ -131,7 +168,6 @@ public class OnlineLDA {
 			String[] tmpString_Doc = new String[tmpWordSize];
 			double[] tmpCounts_Doc  = new double[tmpWordSize];
 
-			
 			int tmpIdx = 0;
 			HashMap<String, Double> tmpVocabulary_Doc = tmpVocabularyPerDoc.get(d);
 			for(String tmpStr:tmpVocabulary_Doc.keySet()){
