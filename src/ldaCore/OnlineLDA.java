@@ -131,7 +131,6 @@ public class OnlineLDA {
 			
 			double[] phinorm = dot(expElogthetad, expElogbetad);
 			
-			
 		}
 	}
 	
