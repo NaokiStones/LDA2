@@ -7,6 +7,7 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 
+import org.apache.commons.math3.special.Gamma;
 
 import ldaCore.OnlineLDA2;
 
@@ -18,18 +19,20 @@ public class Execute {
 
 	// Free Variables
 	private static String baseURI = "/Users/ishikawanaoki/Documents/datasetML/wiki1000_backUp/";
-	private static int batchSize_ = 3;
-	private static int K = 40;
+//	private static String baseURI = "/Users/ishikawanaoki/Documents/workspace/LDA/myCorpus/";
+	private static int batchSize_ = 2;
+	private static int K = 5;
 	private static double alpha = 1. / K;
 	private static double eta   = 1. / K;
-	private static int totalD   = 10;
-	private static double tau0  = 64*2;
+	private static int totalD   = 100;
+	private static double tau0  = 4;
 	private static double kappa = 0.9;
 	
 	// Control
-	private static int PPLNUM = 20;
+	private static int PPLNUM = 2000;
 
 	public static void main(String[] args) {
+		
 		// IMPORT FILE
 		getFiles();
 
