@@ -2,14 +2,12 @@ package test;
 
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileNotFoundException;
 import java.io.FileReader;
 import java.io.IOException;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.HashMap;
 import java.util.HashSet;
-import java.util.Iterator;
 
 import ldaCore.OnlineLDA2;
 
@@ -24,7 +22,7 @@ public class ExecuteNews20{
 	static HashMap<String, ArrayList<Integer>> topicGammaTopicMap = new HashMap<String, ArrayList<Integer>>();
 
 	// Constant Parameters
-	static int batchSize_ = 5;
+	static int batchSize_ = 50;
 	static String baseURI;
 	static String vocabURI;
 	
@@ -33,17 +31,17 @@ public class ExecuteNews20{
 
 	// LDA Parameters
 	static int K = 4;
-	static double alpha = 1./(K );
-	static double eta = 1./ K;
+	static double alpha = 1./(K);
+	static double eta = 1./ (K);
 	static double tau0 = 4;	// 1024
 	static double kappa = 0.7;	// 0.7
 	static int IterNum = 100;
 	static int PPLNUM = 3;
-	static int totalD= (int)3.3E6;
+	static int totalD= (int)1000000;
 
 	// Control
 	static int limit = 10000;
-	static int trainLine=10;
+	static int trainLine=10000;
 	
 	static OnlineLDA2 onlineLDA2;
 
@@ -70,7 +68,6 @@ public class ExecuteNews20{
 		onlineLDA2.showTopicWords();
 		
 		System.out.println("Experiment Time:" + (end - start));
-		
 	}
 
 	private static void executeTrainingIfIdf() throws IOException {
@@ -89,6 +86,9 @@ public class ExecuteNews20{
 		float tmpIfIdf = -1.0f;
 
 		while(true){
+
+			
+			
 			// FetchLine
 			tmpLine = br.readLine();
 			if(tmpLine == null){

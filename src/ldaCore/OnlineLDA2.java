@@ -6,19 +6,20 @@ import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
+import javax.jws.soap.SOAPBinding.Use;
+
 import org.apache.commons.math3.distribution.GammaDistribution;
 import org.apache.commons.math3.special.Gamma;
 
 import utils.IntDoubleTuple;
 import utils.IntDoubleTupleComperator;
 
-
 public class OnlineLDA2 {
 	
 	//
 	boolean printLambda = false;
 	boolean printGamma  = false;
-	boolean printPhi    = false;
+	boolean printPhi    = true;
 
 	//
 	private Map<String, Integer> vocab = new HashMap<String, Integer>();
@@ -29,7 +30,7 @@ public class OnlineLDA2 {
 	
 	// 
 	private int D_;	
-	private int tmpTotalD_ = 1024;
+	private int tmpTotalD_ = 1110240;
 	private double accTotalD = 0;
 	private int accTotalWords = 0;
 	private int[] Nds;
@@ -58,6 +59,10 @@ public class OnlineLDA2 {
 	private static double alpha_ = 1/20d;
 	private double eta_= 1/ 20d;
 	
+	private int dummySize = 10000;
+	
+	private double[][] dummyLambdas;
+	
 	//
 	private ArrayList<String> newWords;
 	
@@ -74,9 +79,20 @@ public class OnlineLDA2 {
 		// Initialize Internal Params
 		setRandomParams();
 		setParams();
+		setDummyLambda();
 	}
 	
-	
+
+	private void setDummyLambda() {
+		dummyLambdas = new double[dummySize][];
+		for(int b=0; b<dummySize; b++){
+			double[] tmpDummyLambda = new double[K_];
+			tmpDummyLambda= gd.sample(K_); 
+			dummyLambdas[b] = tmpDummyLambda;
+		}
+	}
+
+
 	private void setParams() {
 		lambda_ = new HashMap<Integer, double[]>();
 	}
@@ -159,7 +175,7 @@ public class OnlineLDA2 {
 	}
 	
 	public void trainMiniBatch(String[][] miniBatch, Float[][] tfIdf, int time){
-			// TODO 
+
 		if(printLambda){
 			System.out.println("Lambda:");
 			for(int key: lambda_.keySet()){
@@ -170,6 +186,7 @@ public class OnlineLDA2 {
 		// get the number of words(Nd) for each documents
 		getMiniBatchParams(miniBatch);
 		accTotalD += D_;
+
 		// get ids and cts
 		getIdsCtsIfIdf(miniBatch, tfIdf);
 		
@@ -189,7 +206,7 @@ public class OnlineLDA2 {
 		// TODO 
 //		System.out.println("Gamma:" + Arrays.toString(gamma_[0]));
 //		System.out.println("Gamma:" + Arrays.toString(gamma_[1]));
-		if(printLambda){
+		if(printGamma){
 			System.out.println("Gamma:");
 			for(int d=0; d<D_; d++){
 				for(int w=0; w<gamma_[d].length; w++){
@@ -207,7 +224,6 @@ public class OnlineLDA2 {
 				}
 			}
 		}
-	
 	}
 
 	private void getIdsCtsIfIdf(String[][] miniBatch, Float[][] ifIdf) {
@@ -254,7 +270,6 @@ public class OnlineLDA2 {
 
 	public void trainMiniBatch(String[][] miniBatch, int time){
 
-		// TODO 
 		if(printLambda){
 			System.out.println("Lambda:");
 			for(int key: lambda_.keySet()){
@@ -319,13 +334,12 @@ public class OnlineLDA2 {
 		// phi_
 		phi_ = new double[D_][][];
 		gamma_ = new double[D_][];
-		// gamma, lambda: None
-
 		// gamma and phi
 		for(int d=0; d<D_; d++){
 			// Gamma
 			double[] gammad = getRandomGammaArray();
-			for(int k=0; k<K_; k++) gammad[k] = alpha_ * gammad[k];
+//			System.out.println("gammad:" + Arrays.toString(gammad));
+//			for(int k=0; k<K_; k++) gammad[k] = alpha_ * gammad[k];
 			// phi_ not needed to be initialized
 			double[][] phid = new double[Nds[d]][K_];
 
@@ -336,7 +350,14 @@ public class OnlineLDA2 {
 		// lambda
 		for(String newWord: newWords){
 			int tmpId = vocab.get(newWord);
+			// TODO tmp
 			double[] lambdaNW = getRandomGammaArray(); 
+			
+			int tmpLambdaIdx = lambda_.size() % dummySize;
+			
+			for(int k=0; k<K_; k++){
+				lambdaNW[k] *= dummyLambdas[tmpLambdaIdx][k];
+			}
 			lambda_.put(tmpId, lambdaNW);
 		}
 	}
@@ -350,7 +371,7 @@ public class OnlineLDA2 {
 	private void do_m_step(int d) {
 		
 		HashMap<Integer, double[]> lambdaBar = new HashMap<Integer, double[]>();
-		
+
 		double lambdaBar_kw = 0;
 
 		for(int w=0; w<Nds[d]; w++){
@@ -360,12 +381,12 @@ public class OnlineLDA2 {
 				lambdaBar_kw = eta_ + (tmpTotalD_ / D_) * cts[d][w] * phi_[d][w][k];
 				if(!lambdaBar.containsKey(tmpId)){
 					double[] tmpDArray = new double[K_];
-					Arrays.fill(tmpDArray, 0d);
+					Arrays.fill(tmpDArray, eta_);
 					tmpDArray[k] = lambdaBar_kw;
 					lambdaBar.put(tmpId, tmpDArray);
 				}else{
 					double[] tmpDArray= lambdaBar.get(tmpId);
-					tmpDArray[k] += lambdaBar_kw;
+					tmpDArray[k] = lambdaBar_kw;
 					lambdaBar.put(tmpId, tmpDArray);
 				}
 			}
@@ -377,7 +398,7 @@ public class OnlineLDA2 {
 				// TODO 
 				double[] lambdaW = lambda_.get(lambdaKey);
 				for(int k=0; k<K_; k++){
-					lambdaW[k] = oneMinusRhot * lambdaW[k];
+					lambdaW[k] = oneMinusRhot * lambdaW[k] + rhot * eta_;
 				}
 				lambda_.put(lambdaKey, lambdaW);
 			}else{
@@ -389,15 +410,19 @@ public class OnlineLDA2 {
 				lambda_.put(lambdaKey, lambdaW);
 			}
 		}
+
+		for(int b=0; b<dummySize; b++){
+			for(int k=0; k<K_; k++){
+				dummyLambdas[d][k] =  oneMinusRhot * dummyLambdas[b][k] + (1 - oneMinusRhot) * eta_;
+			}
+		}
 	}
 
 	private void do_e_step(int d) {
 		double[] lastGamma = copyArray(gamma_[d]);
 		double[] nextGamma = copyArray(gamma_[d]);
-//		int tmpT = 0;
+
 		do{
-			// TODO remove
-//			System.out.println("tmpT:" + tmpT++);
 			lastGamma = copyArray(nextGamma);
 			double sumGammad = getSumDArray(gamma_[d]);
 			double sumLambdaK;
@@ -406,11 +431,41 @@ public class OnlineLDA2 {
 				sumLambdaK= getSumLambdaK(d, k);
 
 				// update phi
+				double tmpPhiSum = 0;
 				for(int w=0; w<Nds[d]; w++){
 					int tmpId = ids[d][w];
-					double tmpEqtheta = Gamma.digamma(gamma_[d][k]) - Gamma.digamma(sumGammad);
-					double tmpEqBeta  = Gamma.digamma(lambda_.get(tmpId)[k]) - Gamma.digamma(sumLambdaK);
+
+					double tmpEqtheta = -1;
+					try{
+						tmpEqtheta = Gamma.digamma(gamma_[d][k]) - Gamma.digamma(sumGammad);
+					}catch(Exception e){
+						System.out.println("Error lambda:" + gamma_[d][k]);
+						System.out.println("Error lambdaSum:" + sumGammad);
+						e.printStackTrace();
+					}
+
+					// TODO remove 
+//					System.out.println("lambda:" + lambda_.get(tmpId)[k]);
+//					System.out.println("lambdaDiggamma:" + Gamma.digamma(lambda_.get(tmpId)[k]));
+//					System.out.println("SumlambdaDiggamma:" + Gamma.digamma(sumLambdaK));
+
+					double tmpEqBeta = -1;
+					try{
+						tmpEqBeta  = Gamma.digamma(lambda_.get(tmpId)[k]) - Gamma.digamma(sumLambdaK);
+					}catch(Exception e){
+						System.out.println("Error lambda:" + lambda_.get(tmpId)[k]);
+						System.out.println("Error lambdaSum:" + sumLambdaK);
+						e.printStackTrace();
+					}
+//					System.out.println("tmpEqTheta:" + tmpEqtheta);
+//					System.out.println("tmpEqBeta:" + tmpEqBeta);
 					phi_[d][w][k] = Math.exp(tmpEqtheta + tmpEqBeta);
+					tmpPhiSum += phi_[d][w][k];
+				}
+				
+				// TODO tmp
+				for(int w=0; w<Nds[d]; w++){
+					phi_[d][w][k] /= tmpPhiSum;
 				}
 				
 				// update gamma
@@ -590,8 +645,12 @@ public class OnlineLDA2 {
 				tmpSum1 = 0;
 
 				for(int k=0; k<K_; k++){
-					EqlogTheta_dk = Gamma.digamma(gamma_[d][k]) - Gamma.digamma(gammaSum[d]);
-					EqlogBeta_kw  = Gamma.digamma(lambda_.get(ids[d][w])[k]) - Gamma.digamma(lambdaSum[k]);
+					try{
+						EqlogTheta_dk = Gamma.digamma(gamma_[d][k]) - Gamma.digamma(gammaSum[d]);
+						EqlogBeta_kw  = Gamma.digamma(lambda_.get(ids[d][w])[k]) - Gamma.digamma(lambdaSum[k]);
+					}catch(Exception e){
+						System.out.println("gamma[d][k]:" + gamma_[d][k]);
+					}
 					tmpSum1 += phi_[d][w][k] * (EqlogTheta_dk + EqlogBeta_kw - Math.log(phi_[d][w][k]));
 				}
 				ret += ndw * tmpSum1;	// 1-1
