@@ -24,9 +24,9 @@ public class Execute {
 	private static int K = 5;
 	private static double alpha = 1. / K;
 	private static double eta   = 1. / K;
-	private static int totalD   = 100;
+	private static int totalD   = 33000;
 	private static double tau0  = 4;
-	private static double kappa = 0.9;
+	private static double kappa = 0.7;
 	
 	// Control
 	private static int PPLNUM = 2000;
@@ -68,8 +68,8 @@ public class Execute {
 				onlineLDA2.trainMiniBatch(stringBATCH, time);
 				time += batchSize_;
 			}
-//			onlineLDA2.showTopicWords();
-			System.out.print(/*"perplexity:" +*/ onlineLDA2.getPerplexity() + ",");
+			onlineLDA2.showTopicWords();
+//			System.out.print(/*"perplexity:" +*/ onlineLDA2.getPerplexity() + ",");
 //			System.out.print(onlineLDA_Batch.getBound() + ",");
 		}	
 	}
