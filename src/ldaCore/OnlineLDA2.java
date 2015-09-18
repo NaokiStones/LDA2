@@ -4,7 +4,9 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 import javax.jws.soap.SOAPBinding.Use;
 
@@ -19,7 +21,7 @@ public class OnlineLDA2 {
 	//
 	boolean printLambda = false;
 	boolean printGamma  = false;
-	boolean printPhi    = true;
+	boolean printPhi    = false;
 
 	//
 	private Map<String, Integer> vocab = new HashMap<String, Integer>();
@@ -30,7 +32,7 @@ public class OnlineLDA2 {
 	
 	// 
 	private int D_;	
-	private int tmpTotalD_ = 1110240;
+	private int tmpTotalD_ = 11102;
 	private double accTotalD = 0;
 	private int accTotalWords = 0;
 	private int[] Nds;
@@ -59,15 +61,19 @@ public class OnlineLDA2 {
 	private static double alpha_ = 1/20d;
 	private double eta_= 1/ 20d;
 	
-	private int dummySize = 10000;
-	
+	private int dummySize = 100;
+
 	private double[][] dummyLambdas;
+	
+	private int batchSize_;
+	
+	private Set<String> stopWordSet = new HashSet<String>();
 	
 	//
 	private ArrayList<String> newWords;
 	
 	// Constructor
-	public OnlineLDA2(int K, double alpha, double eta, int totalD, double tau0, double kappa){
+	public OnlineLDA2(int K, double alpha, double eta, int totalD, double tau0, double kappa, int batchSize, String tmpStopWord){
 		// Initialize Free Params
 		K_ = K;
 		alpha_ = alpha;
@@ -75,13 +81,42 @@ public class OnlineLDA2 {
 		tmpTotalD_ = totalD;
 		tau0_ = tau0;
 		kappa_ = kappa;
+		batchSize_= batchSize;
 		
 		// Initialize Internal Params
 		setRandomParams();
 		setParams();
 		setDummyLambda();
+		setStopWord(tmpStopWord);
 	}
-	
+
+	public OnlineLDA2(int K, double alpha, double eta, int totalD, double tau0, double kappa, int batchSize){
+
+		String tmpStopWord = "";
+
+		K_ = K;
+		alpha_ = alpha;
+		eta_ = eta;
+		tmpTotalD_ = totalD;
+		tau0_ = tau0;
+		kappa_ = kappa;
+		batchSize_= batchSize;
+		
+		// Initialize Internal Params
+		setRandomParams();
+		setParams();
+		setDummyLambda();
+		setStopWord(tmpStopWord);
+		
+	}
+
+	private void setStopWord(String stopWord) {
+		String[] tmpStopWords = stopWord.split(" "); 
+		for(int w=0, SIZE = tmpStopWords.length; w<SIZE; w++){
+			stopWordSet.add(tmpStopWords[w]);
+		}
+	}
+
 
 	private void setDummyLambda() {
 		dummyLambdas = new double[dummySize][];
@@ -174,6 +209,50 @@ public class OnlineLDA2 {
 		cts[d] = tmpCts;
 	}
 	
+	public void trainMiniBatch(String[] rawBatch){
+		int tmpBatchSize = rawBatch.length;
+		String[][] tmpMiniBatch = new String[tmpBatchSize][];
+		Float[][]  tmpValueBatch= new Float[tmpBatchSize][];
+		for(int d=0; d<tmpBatchSize; d++){
+			rawBatch[d] = rawBatch[d].replace("\"", "");
+			String[] LabelValueArray = rawBatch[d].split(" ");
+
+			ArrayList<String> tmpLabelsPerDoc = new ArrayList<String>();
+			ArrayList<Float>  tmpValuesPerDoc = new ArrayList<Float>();
+
+			for(int w=0, SIZE = LabelValueArray.length; w< SIZE; w++){
+				String[] LabelValue = LabelValueArray[w].split(":");
+				String label = LabelValue[0];
+				Float  value = Float.parseFloat(LabelValue[1]);
+				
+				if(!checkStopWord(label)){
+					tmpLabelsPerDoc.add(label);
+					tmpValuesPerDoc.add(value);
+				}
+			}
+			
+			int tmpWordSize = tmpLabelsPerDoc.size();
+			String[] tmpLabelPerDocArray = new String[tmpWordSize];
+			Float[]  tmpValuelPerDocArray = new Float[tmpWordSize];
+			for(int w=0; w< tmpWordSize; w++){
+				tmpLabelPerDocArray[w] = tmpLabelsPerDoc.get(w);
+				tmpValuelPerDocArray[w] = tmpValuesPerDoc.get(w);
+			}
+			
+			tmpMiniBatch[d] = tmpLabelPerDocArray;
+			tmpValueBatch[d]= tmpValuelPerDocArray;
+		}
+	}
+	
+	private boolean checkStopWord(String label) {
+		if(stopWordSet.contains(label)){
+			return true;
+		}else{
+			return false;
+		}
+	}
+
+
 	public void trainMiniBatch(String[][] miniBatch, Float[][] tfIdf, int time){
 
 		if(printLambda){

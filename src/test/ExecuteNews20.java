@@ -22,9 +22,11 @@ public class ExecuteNews20{
 	static HashMap<String, ArrayList<Integer>> topicGammaTopicMap = new HashMap<String, ArrayList<Integer>>();
 
 	// Constant Parameters
-	static int batchSize_ = 50;
+	static int batchSize_ = 10;
 	static String baseURI;
 	static String vocabURI;
+	static String tfIdfURI;
+	static String countURI;
 	
 	// limit Read File Per Directory
 //	static int limit = 10;
@@ -33,11 +35,11 @@ public class ExecuteNews20{
 	static int K = 4;
 	static double alpha = 1./(K);
 	static double eta = 1./ (K);
-	static double tau0 = 4;	// 1024
-	static double kappa = 0.7;	// 0.7
+	static double tau0 = 80;	// 1024
+	static double kappa = 0.8;	// 0.7
 	static int IterNum = 100;
 	static int PPLNUM = 3;
-	static int totalD= (int)1000000;
+	static int totalD= (int)11000;
 
 	// Control
 	static int limit = 10000;
@@ -45,19 +47,28 @@ public class ExecuteNews20{
 	
 	static OnlineLDA2 onlineLDA2;
 
-
+	static String stopWord = "a b c d e f g h i j k l m n o p q r s t u v w x y z the of in and have to it was or were this that with is some on for so how you if would com be your my one not never then take for an can no but aaa when as out just from does they back up she those who another her do by must what there at very are am much way all any other me he something someone doesn his also its has into us him than about their may too will had been we them why did being over without these could out which only should even well more where after while anyone our now such under two ten else always going either each however non let done ever between anything before every same since because quite sure here nothing new don off still down yes around few many own go get know think like make say see look use said";
+	static String[] stopWords;
+	
+	
+	static boolean tdIdf = false;
+	static boolean count = true;
+	
 	public static void main(String[] args){
 		long start = System.nanoTime();
-		baseURI = "/Users/ishikawanaoki/Documents/workspace/LDA/targetData/";
-		vocabURI= "/Users/ishikawanaoki/Documents/workspace/LDA/vocab/news20vocab.csv";
+//		baseURI = "/Users/ishikawanaoki/Documents/workspace/LDA/targetData/";
+		tfIdfURI= "/Users/ishikawanaoki/Documents/workspace/LDA/vocab/news20vocab.csv";
+		countURI= "/Users/ishikawanaoki/Documents/workspace/LDA/vocab/news20wordsCount.csv";
 		
-		onlineLDA2 = new OnlineLDA2(K, alpha, eta, totalD, tau0, kappa);
+	
+		stopWords = stopWord.split(" ");	
+		onlineLDA2 = new OnlineLDA2(K, alpha, eta, totalD, tau0, kappa, batchSize_);
 		
 //		getFiles();	 
 
 		try {
 //			executeTraining();
-			executeTrainingIfIdf();
+			executeTrainingTfIdf();
 		} catch (IOException e) {
 			e.printStackTrace();
 		}
@@ -70,28 +81,69 @@ public class ExecuteNews20{
 		System.out.println("Experiment Time:" + (end - start));
 	}
 
-	private static void executeTrainingIfIdf() throws IOException {
-		BufferedReader br = new BufferedReader(new FileReader(vocabURI));
+	private static void executeTrainingTfIdf() throws IOException {
+		BufferedReader br = new BufferedReader(new FileReader(countURI));
+		// TODO remove?
+		BufferedReader br2 = new BufferedReader(new FileReader(tfIdfURI));
 		
 		int docid = 1;
-		String tmpLine;
 		ArrayList<ArrayList<String>> tmpBatchWordArrayList = new ArrayList<ArrayList<String>>();
 		ArrayList<ArrayList<Float>> tmpBatchIfIdfArrayList = new ArrayList<ArrayList<Float>>();
 		ArrayList<String> wordListPerDoc = new ArrayList<String>();
-		ArrayList<Float> ifIdfListPerDoc = new ArrayList<Float>();
+		ArrayList<Float> tfIdfListPerDoc = new ArrayList<Float>();
 		
 		//
 		int tmpDocId = -1;
 		String tmpWord= "";
 		float tmpIfIdf = -1.0f;
 
-		while(true){
+		String tmpLine;
+		
+		HashMap<String, Float> tdIdfMap = new HashMap<String, Float>();
+//		while(true){
+//			tmpLine2 = br2.readLine();
+//		}
 
-			
-			
+
+		HashSet<String> stopWordSet = new HashSet<String>();
+		for(String tmpStopWord: stopWords){
+			stopWordSet.add(tmpStopWord);
+		}
+
+		while(true){
 			// FetchLine
-			tmpLine = br.readLine();
+			tmpLine = null;
+			if(count){
+				tmpLine= br.readLine();
+			}
+			if(tdIdf){
+				tmpLine = br2.readLine();
+			}
+
+
 			if(tmpLine == null){
+				if(tmpBatchIfIdfArrayList.size() != 0){
+					int tmpBatchSize = tmpBatchIfIdfArrayList.size();
+					String[][] stringBatch = new String[tmpBatchSize][];
+					Float[][] tfIdfBatch = new Float[tmpBatchSize][];
+					for(int b=0; b<tmpBatchSize; b++){
+						int tmpElementSize = tmpBatchIfIdfArrayList.get(b).size();
+						String[] stringArray = new String[tmpElementSize];
+						Float[] tfIdfArray   = new Float[tmpElementSize];
+						
+						for(int w=0; w<tmpElementSize; w++){
+							stringArray[w] = tmpBatchWordArrayList.get(b).get(w);
+							if(stopWordSet.contains(stringArray[w])){
+								tfIdfArray[w] = 0f;
+							}else{
+								tfIdfArray[w]  = tmpBatchIfIdfArrayList.get(b).get(w);
+							}
+						}
+						stringBatch[b] = stringArray;
+						tfIdfBatch[b]  = tfIdfArray;
+					}
+					onlineLDA2.trainMiniBatch(stringBatch, tfIdfBatch, docid);
+				}
 				break;
 			}
 			
@@ -103,40 +155,49 @@ public class ExecuteNews20{
 			
 			if(tmpDocId == docid){
 				wordListPerDoc.add(tmpWord);
-				ifIdfListPerDoc.add(tmpIfIdf);
+				tfIdfListPerDoc.add(tmpIfIdf);
 			}else{
 				docid++;
 				
 				tmpBatchWordArrayList.add(wordListPerDoc);
-				tmpBatchIfIdfArrayList.add(ifIdfListPerDoc);
+				tmpBatchIfIdfArrayList.add(tfIdfListPerDoc);
 				
 				wordListPerDoc = new ArrayList<String>();
-				ifIdfListPerDoc = new ArrayList<Float>();
+				tfIdfListPerDoc = new ArrayList<Float>();
+				
+				wordListPerDoc.add(tmpWord);
+				tfIdfListPerDoc.add(tmpIfIdf);
 				
 				if(tmpBatchIfIdfArrayList.size() == batchSize_){
 					String[][] stringBatch = new String[batchSize_][];
-					Float[][] ifIdfBatch = new Float[batchSize_][];
+					Float[][] tfIdfBatch = new Float[batchSize_][];
 					for(int d=0; d<batchSize_; d++){
 						int tmpElementSize = tmpBatchIfIdfArrayList.get(d).size();
 						String[] stringArray = new String[tmpElementSize];
 						Float[] ifIdfArray   = new Float[tmpElementSize];
 						for(int w=0; w<tmpElementSize; w++){
 							stringArray[w] = tmpBatchWordArrayList.get(d).get(w);
-							ifIdfArray[w]  = tmpBatchIfIdfArrayList.get(d).get(w);
+							if(stopWordSet.contains(stringArray[w])){
+								ifIdfArray[w] = 0f;
+							}else{
+								ifIdfArray[w]  = tmpBatchIfIdfArrayList.get(d).get(w);
+							}
 						}
 						
 						stringBatch[d] = stringArray;
-						ifIdfBatch[d]  = ifIdfArray;
+						tfIdfBatch[d]  = ifIdfArray;
 					}
 					tmpBatchIfIdfArrayList.clear();
 					tmpBatchWordArrayList.clear();
 					
-					onlineLDA2.trainMiniBatch(stringBatch, ifIdfBatch, docid);
+					onlineLDA2.trainMiniBatch(stringBatch, tfIdfBatch, docid);
 					
-					System.out.println(docid);
+					System.out.print((int)onlineLDA2.getPerplexity() + ", ");
+//					System.out.println(docid);
 				}
 			}
 		}
+		System.out.println("");
 	}
 
 	private static void printConfusionMatrix() {
