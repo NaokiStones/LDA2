@@ -51,8 +51,8 @@ public class ExecuteNews20{
 	static String[] stopWords;
 	
 	
-	static boolean tdIdf = false;
-	static boolean count = true;
+	static boolean tdIdf = true;
+	static boolean count = false;
 	
 	public static void main(String[] args){
 		long start = System.nanoTime();
@@ -129,6 +129,9 @@ public class ExecuteNews20{
 					for(int b=0; b<tmpBatchSize; b++){
 						int tmpElementSize = tmpBatchIfIdfArrayList.get(b).size();
 						String[] stringArray = new String[tmpElementSize];
+//						for(int i=0; i<stringArray.length; i++){
+//							stringArray[i] = stringArray[i].replace("\"", "");
+//						}
 						Float[] tfIdfArray   = new Float[tmpElementSize];
 						
 						for(int w=0; w<tmpElementSize; w++){
@@ -192,8 +195,8 @@ public class ExecuteNews20{
 					
 					onlineLDA2.trainMiniBatch(stringBatch, tfIdfBatch, docid);
 					
-					System.out.print((int)onlineLDA2.getPerplexity() + ", ");
-//					System.out.println(docid);
+//					System.out.print((int)onlineLDA2.getPerplexity() + ", ");
+					System.out.println(docid);
 				}
 			}
 		}

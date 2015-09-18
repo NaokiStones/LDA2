@@ -53,7 +53,7 @@ public class OnlineLDA2 {
 	private double SHAPE = 100d;
 	private double SCALE = 1d / SHAPE;
 	
-	private double DELTA = 1E-10;
+	private double DELTA = 1E-12;
 	
 	private double tau0_ = 10240;
 	private double kappa_= 0.7;
@@ -71,6 +71,20 @@ public class OnlineLDA2 {
 	
 	//
 	private ArrayList<String> newWords;
+	
+	private String[] Symbols = {"\\", "/", ">" ,"<" ,"-" ,"," ,"." ,"(" ,")" ,":" ,";" ,"'" ,"[" ,"]","!" ,"*" ,"#" ,"+","%" ,"@","&","?","$" ,"0"
+,"1"
+,"2"
+,"3"
+,"4"
+,"5"
+,"6"
+,"7"
+,"8"
+,"9"
+,"\t"
+,"_","{","}","=","|"
+	};
 	
 	// Constructor
 	public OnlineLDA2(int K, double alpha, double eta, int totalD, double tau0, double kappa, int batchSize, String tmpStopWord){
@@ -143,106 +157,26 @@ public class OnlineLDA2 {
 	}
 
 
-	public void getIdsCts(String[][] miniBatch){
-		// global
-		ids = new int[D_][];
-		cts = new float[D_][];
-		
-		newWords = new ArrayList<String>();
-		
-		
-		// HashMap of word per Documents
-		Map<Integer, Float> wordCountMap = new HashMap<Integer, Float>();
-		
-		for(int d=0; d<D_; d++){
-			// get Nd : number of word per documents
-			int Nd = miniBatch[d].length;
-			// reset wordCountMap
-			wordCountMap = new HashMap<Integer, Float>();
 
-			for(int w=0; w<Nd; w++){
-				String tmpWord = miniBatch[d][w];
-				if(!vocab.containsKey(tmpWord)){
-					int tmpVSize = vocab.size();
-					vocab.put(tmpWord, tmpVSize);
-					rVocab.put(tmpVSize, tmpWord);
-
-					newWords.add(tmpWord);
-				}
-				
-				int tmpId = vocab.get(tmpWord);
-				if(!wordCountMap.containsKey(tmpId)){
-					wordCountMap.put(tmpId, 1f);
-				}else{
-					float tmpFrequency = wordCountMap.get(tmpId);
-					tmpFrequency++;
-					wordCountMap.put(tmpId, tmpFrequency);
-				}
+	private void updateIdCts(int d, Float[] values, String[] labels, int removedLabel) {
+		int validWordSize = labels.length - removedLabel;
+		Nds[d] = validWordSize;
+		int[] tmpIds = new int[validWordSize];
+		float[] tmpCts = new float[validWordSize];
+		
+		int tmpId = 0;
+		for(int w=0; w<labels.length; w++){
+			if(vocab.containsKey(labels[w])){
+				tmpIds[tmpId] = vocab.get(labels[w]);
+				tmpCts[tmpId] = values[w];
+				tmpId++;
 			}
-			updateIdCts(d, wordCountMap, miniBatch[d]);
 		}
-	}
-
-	private void updateIdCts(int d, Float[] tfIdf, String[] oneBatch) {
-		int[] tmpIds = new int[oneBatch.length];
-		float[] tmpCts = new float[oneBatch.length];
-		
-		for(int w=0; w<oneBatch.length; w++){
-			tmpIds[w] = vocab.get(oneBatch[w]); 
-			tmpCts[w] = tfIdf[w];
-		}
-
 		ids[d] = tmpIds;
 		cts[d] = tmpCts;
 	}
 
-	private void updateIdCts(int d, Map<Integer, Float> wordCountMap, String[] oneBatch) {
-		int[] tmpIds = new int[oneBatch.length];
-		float[] tmpCts = new float[oneBatch.length];
-		
-		for(int w=0; w<oneBatch.length; w++){
-			tmpIds[w] = vocab.get(oneBatch[w]); 
-			tmpCts[w] = wordCountMap.get(tmpIds[w]);
-		}
 
-		ids[d] = tmpIds;
-		cts[d] = tmpCts;
-	}
-	
-	public void trainMiniBatch(String[] rawBatch){
-		int tmpBatchSize = rawBatch.length;
-		String[][] tmpMiniBatch = new String[tmpBatchSize][];
-		Float[][]  tmpValueBatch= new Float[tmpBatchSize][];
-		for(int d=0; d<tmpBatchSize; d++){
-			rawBatch[d] = rawBatch[d].replace("\"", "");
-			String[] LabelValueArray = rawBatch[d].split(" ");
-
-			ArrayList<String> tmpLabelsPerDoc = new ArrayList<String>();
-			ArrayList<Float>  tmpValuesPerDoc = new ArrayList<Float>();
-
-			for(int w=0, SIZE = LabelValueArray.length; w< SIZE; w++){
-				String[] LabelValue = LabelValueArray[w].split(":");
-				String label = LabelValue[0];
-				Float  value = Float.parseFloat(LabelValue[1]);
-				
-				if(!checkStopWord(label)){
-					tmpLabelsPerDoc.add(label);
-					tmpValuesPerDoc.add(value);
-				}
-			}
-			
-			int tmpWordSize = tmpLabelsPerDoc.size();
-			String[] tmpLabelPerDocArray = new String[tmpWordSize];
-			Float[]  tmpValuelPerDocArray = new Float[tmpWordSize];
-			for(int w=0; w< tmpWordSize; w++){
-				tmpLabelPerDocArray[w] = tmpLabelsPerDoc.get(w);
-				tmpValuelPerDocArray[w] = tmpValuesPerDoc.get(w);
-			}
-			
-			tmpMiniBatch[d] = tmpLabelPerDocArray;
-			tmpValueBatch[d]= tmpValuelPerDocArray;
-		}
-	}
 	
 	private boolean checkStopWord(String label) {
 		if(stopWordSet.contains(label)){
@@ -251,61 +185,8 @@ public class OnlineLDA2 {
 			return false;
 		}
 	}
-
-
-	public void trainMiniBatch(String[][] miniBatch, Float[][] tfIdf, int time){
-
-		if(printLambda){
-			System.out.println("Lambda:");
-			for(int key: lambda_.keySet()){
-				System.out.println(Arrays.toString(lambda_.get(key)));
-			}
-		}
-		
-		// get the number of words(Nd) for each documents
-		getMiniBatchParams(miniBatch);
-		accTotalD += D_;
-
-		// get ids and cts
-		getIdsCtsIfIdf(miniBatch, tfIdf);
-		
-		// check
-		updateSizeOfParameterPerMiniBatch(miniBatch);
-
-		rhot = Math.pow(tau0_+time, -kappa_);
-
-		for(int d=0; d<D_; d++){
-			// get ids and cts
-			do_e_step(d);
-
-			// update Lambda
-			do_m_step(d);
-		}
-		
-		// TODO 
-//		System.out.println("Gamma:" + Arrays.toString(gamma_[0]));
-//		System.out.println("Gamma:" + Arrays.toString(gamma_[1]));
-		if(printGamma){
-			System.out.println("Gamma:");
-			for(int d=0; d<D_; d++){
-				for(int w=0; w<gamma_[d].length; w++){
-					System.out.print(gamma_[d][w] + ",");
-				}
-				System.out.println("");
-			}
-		}
-		
-		if(printPhi){
-			System.out.println("phi");
-			for(int d=0; d<D_; d++){
-				for(int w=0; w<Nds[d]; w++){
-					System.out.println(Arrays.toString(phi_[d][w]));
-				}
-			}
-		}
-	}
-
-	private void getIdsCtsIfIdf(String[][] miniBatch, Float[][] ifIdf) {
+	
+	private void getIdsCts(String[][] miniBatch) {
 		// global
 		ids = new int[D_][];
 		cts = new float[D_][];
@@ -314,88 +195,63 @@ public class OnlineLDA2 {
 		
 		
 		// HashMap of word per Documents
-		Map<Integer, Float> wordCountMap = new HashMap<Integer, Float>();
+		Map<Integer, Float> labelValueMap = new HashMap<Integer, Float>();
 		
 		for(int d=0; d<D_; d++){
 			// get Nd : number of word per documents
 			int Nd = miniBatch[d].length;
 			// reset wordCountMap
-			wordCountMap = new HashMap<Integer, Float>();
+			labelValueMap = new HashMap<Integer, Float>();
+			
+			String[] labels = new String[Nd];
+			Float[]  values = new Float[Nd];
+			
+			int removedLabel = 0;
 
 			for(int w=0; w<Nd; w++){
-				String tmpWord = miniBatch[d][w];
-				if(!vocab.containsKey(tmpWord)){
-					int tmpVSize = vocab.size();
-					vocab.put(tmpWord, tmpVSize);
-					rVocab.put(tmpVSize, tmpWord);
+				String[] labelValue = miniBatch[d][w].split(":");
+				String label = labelValue[0];
+				labels[w] = label;
+				Float value  = Float.parseFloat(labelValue[1]);
+				values[w] = value;
 
-					newWords.add(tmpWord);
+				label = removeSymbol(label);
+				
+				if(label.length()==0){
+					removedLabel++;
+				}
+
+				if(checkStopWord(label)){
+					values[w] = 0f;
 				}
 				
-				int tmpId = vocab.get(tmpWord);
-				if(!wordCountMap.containsKey(tmpId)){
-					wordCountMap.put(tmpId, 1f);
+				if(!vocab.containsKey(label)){
+					int tmpVSize = vocab.size();
+					vocab.put(label, tmpVSize);
+					rVocab.put(tmpVSize, label);
+
+					newWords.add(label);
+				}
+				
+				int tmpId = vocab.get(label);
+				if(!labelValueMap.containsKey(tmpId)){
+					labelValueMap.put(tmpId, 1f);
 				}else{
-					float tmpFrequency = wordCountMap.get(tmpId);
-					tmpFrequency++;
-					wordCountMap.put(tmpId, tmpFrequency);
+					float tmpValue= labelValueMap.get(tmpId);
+					tmpValue += value;
+					labelValueMap.put(tmpId, tmpValue);
 				}
 			}
-			updateIdCts(d, ifIdf[d], miniBatch[d]);
+			updateIdCts(d, values, labels, removedLabel);
 		}
-
 	}
 
-
-	public void trainMiniBatch(String[][] miniBatch, int time){
-
-		if(printLambda){
-			System.out.println("Lambda:");
-			for(int key: lambda_.keySet()){
-				System.out.println(Arrays.toString(lambda_.get(key)));
-			}
+	private String removeSymbol(String label) {
+		for(String symbol:Symbols){
+			label = label.replace(symbol, "");
 		}
 		
-		// get the number of words(Nd) for each documents
-		getMiniBatchParams(miniBatch);
-		accTotalD += D_;
-		// get ids and cts
-		getIdsCts(miniBatch);
-		
-		// check
-		updateSizeOfParameterPerMiniBatch(miniBatch);
-
-		rhot = Math.pow(tau0_+time, -kappa_);
-
-		for(int d=0; d<D_; d++){
-			// get ids and cts
-			do_e_step(d);
-
-			// update Lambda
-			do_m_step(d);
-		}
-		
-		// TODO 
-//		System.out.println("Gamma:" + Arrays.toString(gamma_[0]));
-//		System.out.println("Gamma:" + Arrays.toString(gamma_[1]));
-		if(printLambda){
-			System.out.println("Gamma:");
-			for(int d=0; d<D_; d++){
-				for(int w=0; w<gamma_[d].length; w++){
-					System.out.print(gamma_[d][w] + ",");
-				}
-				System.out.println("");
-			}
-		}
-		
-		if(printPhi){
-			System.out.println("phi");
-			for(int d=0; d<D_; d++){
-				for(int w=0; w<Nds[d]; w++){
-					System.out.println(Arrays.toString(phi_[d][w]));
-				}
-			}
-		}
+		return label;
 	}
 
 	private void getMiniBatchParams(String[][] miniBatch) {
@@ -405,11 +261,12 @@ public class OnlineLDA2 {
 		
 		for(int d=0; d<D_; d++){
 			Nds[d] = miniBatch[d].length;
+			// TODO different a little
 			accTotalWords += Nds[d];
 		}
 	}
 
-	private void updateSizeOfParameterPerMiniBatch(String[][] miniBatch) {
+	private void updateSizeOfParameterPerMiniBatch() {
 		// phi_
 		phi_ = new double[D_][][];
 		gamma_ = new double[D_][];
@@ -417,8 +274,6 @@ public class OnlineLDA2 {
 		for(int d=0; d<D_; d++){
 			// Gamma
 			double[] gammad = getRandomGammaArray();
-//			System.out.println("gammad:" + Arrays.toString(gammad));
-//			for(int k=0; k<K_; k++) gammad[k] = alpha_ * gammad[k];
 			// phi_ not needed to be initialized
 			double[][] phid = new double[Nds[d]][K_];
 
@@ -429,7 +284,6 @@ public class OnlineLDA2 {
 		// lambda
 		for(String newWord: newWords){
 			int tmpId = vocab.get(newWord);
-			// TODO tmp
 			double[] lambdaNW = getRandomGammaArray(); 
 			
 			int tmpLambdaIdx = lambda_.size() % dummySize;
@@ -492,7 +346,7 @@ public class OnlineLDA2 {
 
 		for(int b=0; b<dummySize; b++){
 			for(int k=0; k<K_; k++){
-				dummyLambdas[d][k] =  oneMinusRhot * dummyLambdas[b][k] + (1 - oneMinusRhot) * eta_;
+				dummyLambdas[b][k] =  oneMinusRhot * dummyLambdas[b][k] + (1 - oneMinusRhot) * eta_;
 			}
 		}
 	}
@@ -523,11 +377,6 @@ public class OnlineLDA2 {
 						e.printStackTrace();
 					}
 
-					// TODO remove 
-//					System.out.println("lambda:" + lambda_.get(tmpId)[k]);
-//					System.out.println("lambdaDiggamma:" + Gamma.digamma(lambda_.get(tmpId)[k]));
-//					System.out.println("SumlambdaDiggamma:" + Gamma.digamma(sumLambdaK));
-
 					double tmpEqBeta = -1;
 					try{
 						tmpEqBeta  = Gamma.digamma(lambda_.get(tmpId)[k]) - Gamma.digamma(sumLambdaK);
@@ -536,15 +385,14 @@ public class OnlineLDA2 {
 						System.out.println("Error lambdaSum:" + sumLambdaK);
 						e.printStackTrace();
 					}
-//					System.out.println("tmpEqTheta:" + tmpEqtheta);
-//					System.out.println("tmpEqBeta:" + tmpEqBeta);
 					phi_[d][w][k] = Math.exp(tmpEqtheta + tmpEqBeta);
+
 					tmpPhiSum += phi_[d][w][k];
 				}
 				
-				// TODO tmp
+//				// TODO tmp
 				for(int w=0; w<Nds[d]; w++){
-					phi_[d][w][k] /= tmpPhiSum;
+					phi_[d][w][k] /= (tmpPhiSum);
 				}
 				
 				// update gamma
@@ -584,8 +432,6 @@ public class OnlineLDA2 {
 		}
 		
 		if(diff < K_ * DELTA){
-			// TODO diff
-//			System.out.println("diff:" + diff);
 			return true;
 		}else{
 			return false;
@@ -627,6 +473,7 @@ public class OnlineLDA2 {
 	private ArrayList<String> getSortedLambda(int k) {
 		ArrayList<String> ret = new ArrayList<String>();
 		ArrayList<IntDoubleTuple> compareList = new ArrayList<IntDoubleTuple>();
+		
 		for(int id:lambda_.keySet()){
 			double tmpValue = lambda_.get(id)[k];
 			compareList.add(new IntDoubleTuple(id, tmpValue));
@@ -646,11 +493,6 @@ public class OnlineLDA2 {
 		double bound = calcBoundPerMiniBatch();
 		
 		ret = Math.exp((-1) * (bound / accTotalWords));
-//		ret = bound / accTotalWords;
-		
-		
-//		accTotalD = 0;
-//		accTotalWords = 0;
 		
 		return ret;
 	}
@@ -770,7 +612,6 @@ public class OnlineLDA2 {
 				}
 				
 				tmpSum3 += (-1) * (Gamma.logGamma(Math.abs(tmpSum3_1 + tmpSum3_2)));
-//				System.out.println(tmpSum3);
 			}
 			ret += (tmpSum3 / D_);		//3-1
 			// ** THIRD LINE
@@ -787,4 +628,64 @@ public class OnlineLDA2 {
 		}
 		return ret;
 	}
+
+	public void trainMiniBatch(String[][] miniBatch, int time) {
+		D_ = miniBatch.length;
+		
+		rhot = Math.pow(tau0_ + time, -kappa_);
+	
+		if(printLambda){
+			System.out.println("Lambda:");
+			for(int key: lambda_.keySet()){
+				System.out.println(Arrays.toString(lambda_.get(key)));
+			}
+		}
+		
+		
+		// get the number of words(Nd) for each documents
+		getMiniBatchParams(miniBatch);
+		accTotalD += D_;
+
+		// get ids and cts
+		getIdsCts(miniBatch);
+//		
+//		// check
+		updateSizeOfParameterPerMiniBatch();
+//
+		for(int d=0; d<D_; d++){
+			// get ids and cts
+			do_e_step(d);
+
+			// update Lambda
+			do_m_step(d);
+		}
+		
+		if(printGamma){
+			System.out.println("Gamma:");
+			for(int d=0; d<D_; d++){
+				for(int w=0; w<gamma_[d].length; w++){
+					System.out.print(gamma_[d][w] + ",");
+				}
+				System.out.println("");
+			}
+		}
+		
+		if(printPhi){
+			System.out.println("phi");
+			for(int d=0; d<D_; d++){
+				for(int w=0; w<Nds[d]; w++){
+					System.out.println(Arrays.toString(phi_[d][w]));
+				}
+			}
+		}
+	}
 }
+
+
+
+
+
+
+
+
+
