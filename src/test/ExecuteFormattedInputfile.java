@@ -11,6 +11,7 @@ import java.util.HashMap;
 import java.util.HashSet;
 
 import ldaCore.OnlineLDA2;
+import ldaCore.OnlineLDA3;
 
 
 
@@ -35,8 +36,8 @@ public class ExecuteFormattedInputfile{
 	static double eta = 1./ (K);
 	static double tau0 = 80;	// 1024
 	static double kappa = 0.8;	// 0.7
-	static int IterNum = 100;
-	static int PPLNUM = 3;
+	static int IterNum = 1;
+	static int PPLNUM = 1;
 	static int totalD= (int)11000;
 
 	// Control
@@ -46,16 +47,13 @@ public class ExecuteFormattedInputfile{
 	static OnlineLDA2 onlineLDA2;
 
 	static String stopWord = "a b c d e f g h i j k l m n o p q r s t u v w x y z the of in and have to it was or were this that with is some on for so how you if would com be your my one not never then take for an can no but aaa when as out just from does they back up she those who another her do by must what there at very are am much way all any other me he something someone doesn his also its has into us him than about their may too will had been we them why did being over without these could out which only should even well more where after while anyone our now such under two ten else always going either each however non let done ever between anything before every same since because quite sure here nothing new don off still down yes around few many own go get know think like make say see look use said";
-	static String[] stopWords;
 	
 	public static void main(String[] args){
 		long start = System.nanoTime();
-		targetURI = "/Users/ishikawanaoki/dataset/reuters_count.txt";
+		targetURI = "/Users/ishikawanaoki/dataset/news20_tdIdf.txt";
 		
-	
-		stopWords = stopWord.split(" ");	
 		onlineLDA2 = new OnlineLDA2(K, alpha, eta, totalD, tau0, kappa, batchSize_, stopWord);
-		
+
 		try {
 			executeTraining();
 		} catch (IOException e) {
@@ -71,26 +69,32 @@ public class ExecuteFormattedInputfile{
 	}
 
 	private static void executeTraining() throws IOException {
-		BufferedReader br = new BufferedReader(new FileReader(targetURI));
-		ArrayList<String[]> miniBatchArrayList = new ArrayList<String[]>();
-		String[][] miniBatch;	// TODO
-		
-		int time = 0;
-		while(true){
-			String docString = br.readLine();
-			time++;
-			
-			if(docString == null){
-				executeMiniBatchLearining(miniBatchArrayList, time);
-				break;
-			}else{
-				String[] labelValues = docString.split(" "); 
-				miniBatchArrayList.add(labelValues);
 
-				if(miniBatchArrayList.size() == batchSize_){
-					System.out.println("time:" +time);
+		int time = 0;
+
+		for(int iter=0; iter<PPLNUM; iter++){
+			System.out.println("Iteration:" + iter);
+
+			BufferedReader br = new BufferedReader(new FileReader(targetURI));
+			ArrayList<String[]> miniBatchArrayList = new ArrayList<String[]>();
+			String[][] miniBatch;	// TODO
+
+			while(true){
+				String docString = br.readLine();
+				time++;
+
+				if(docString == null){
 					executeMiniBatchLearining(miniBatchArrayList, time);
-					miniBatchArrayList.clear();
+					break;
+				}else{
+					String[] labelValues = docString.split(" "); 
+					miniBatchArrayList.add(labelValues);
+
+					if(miniBatchArrayList.size() == batchSize_){
+						System.out.println("time:" +time);
+						executeMiniBatchLearining(miniBatchArrayList, time);
+						miniBatchArrayList.clear();
+					}
 				}
 			}
 		}
@@ -103,6 +107,9 @@ public class ExecuteFormattedInputfile{
 		String[][] miniBatch = new String[miniBatchArrayList.size()][];
 		for(int d=0, SIZE = miniBatchArrayList.size(); d< SIZE; d++){
 			miniBatch[d] = miniBatchArrayList.get(d);
+		}
+		if(miniBatch==null){
+			System.out.println("MiniBatch is null");
 		}
 		onlineLDA2.trainMiniBatch(miniBatch, time);
 	}

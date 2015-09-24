@@ -8,8 +8,6 @@ import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
 
-import javax.jws.soap.SOAPBinding.Use;
-
 import org.apache.commons.math3.distribution.GammaDistribution;
 import org.apache.commons.math3.special.Gamma;
 
@@ -53,12 +51,12 @@ public class OnlineLDA2 {
 	private double SHAPE = 100d;
 	private double SCALE = 1d / SHAPE;
 	
-	private double DELTA = 1E-12;
+	private double DELTA = 1E-10;
 	
-	private double tau0_ = 10240;
+	private double tau0_ = 1020;
 	private double kappa_= 0.7;
 	private double rhot;
-	private static double alpha_ = 1/20d;
+	private static double alpha_ = 1/2d;
 	private double eta_= 1/ 20d;
 	
 	private int dummySize = 100;
@@ -72,19 +70,7 @@ public class OnlineLDA2 {
 	//
 	private ArrayList<String> newWords;
 	
-	private String[] Symbols = {"\\", "/", ">" ,"<" ,"-" ,"," ,"." ,"(" ,")" ,":" ,";" ,"'" ,"[" ,"]","!" ,"*" ,"#" ,"+","%" ,"@","&","?","$" ,"0"
-,"1"
-,"2"
-,"3"
-,"4"
-,"5"
-,"6"
-,"7"
-,"8"
-,"9"
-,"\t"
-,"_","{","}","=","|"
-	};
+	private String[] Symbols = {"\\", "/", ">" ,"<" ,"-" ,"," ,"." ,"(" ,")" ,":" ,";" ,"'" ,"[" ,"]","!" ,"*" ,"#" ,"+","%" ,"@","&","?","$","0","1","2","3","4","5","6","7","8","9","\t","_","{","}","=","|"};
 	
 	// Constructor
 	public OnlineLDA2(int K, double alpha, double eta, int totalD, double tau0, double kappa, int batchSize, String tmpStopWord){
@@ -121,7 +107,6 @@ public class OnlineLDA2 {
 		setParams();
 		setDummyLambda();
 		setStopWord(tmpStopWord);
-		
 	}
 
 	private void setStopWord(String stopWord) {
@@ -131,7 +116,6 @@ public class OnlineLDA2 {
 		}
 	}
 
-
 	private void setDummyLambda() {
 		dummyLambdas = new double[dummySize][];
 		for(int b=0; b<dummySize; b++){
@@ -140,7 +124,6 @@ public class OnlineLDA2 {
 			dummyLambdas[b] = tmpDummyLambda;
 		}
 	}
-
 
 	private void setParams() {
 		lambda_ = new HashMap<Integer, double[]>();
@@ -155,8 +138,6 @@ public class OnlineLDA2 {
 			tmp[0] = tmp[1];
 		}
 	}
-
-
 
 	private void updateIdCts(int d, Float[] values, String[] labels, int removedLabel) {
 		int validWordSize = labels.length - removedLabel;
@@ -176,8 +157,6 @@ public class OnlineLDA2 {
 		cts[d] = tmpCts;
 	}
 
-
-	
 	private boolean checkStopWord(String label) {
 		if(stopWordSet.contains(label)){
 			return true;
@@ -192,7 +171,6 @@ public class OnlineLDA2 {
 		cts = new float[D_][];
 		
 		newWords = new ArrayList<String>();
-		
 		
 		// HashMap of word per Documents
 		Map<Integer, Float> labelValueMap = new HashMap<Integer, Float>();
@@ -363,8 +341,19 @@ public class OnlineLDA2 {
 				sumGammad = getSumDArray(gamma_[d]);
 				sumLambdaK= getSumLambdaK(d, k);
 
+				// update gamma
+				double tmpGamma_dk = alpha_;
+				for(int w=0; w<Nds[d]; w++){
+					int tmpId = ids[d][w];
+//					tmpGamma_dk += phi_[d][w][k] * ((cts[d][w]));
+					tmpGamma_dk += phi_[d][w][k] * ((cts[d][w]));
+				}
+				gamma_[d][k] = tmpGamma_dk;
+				nextGamma[k] = tmpGamma_dk;
+
 				// update phi
 				double tmpPhiSum = 0;
+
 				for(int w=0; w<Nds[d]; w++){
 					int tmpId = ids[d][w];
 
@@ -391,17 +380,11 @@ public class OnlineLDA2 {
 				}
 				
 //				// TODO tmp
-				for(int w=0; w<Nds[d]; w++){
-					phi_[d][w][k] /= (tmpPhiSum);
-				}
+//				for(int w=0; w<Nds[d]; w++){
+//					phi_[d][w][k]/= (tmpPhiSum);
+//				}
 				
-				// update gamma
-				double tmpGamma_dk = alpha_;
-				for(int w=0; w<Nds[d]; w++){
-					tmpGamma_dk += phi_[d][w][k] * cts[d][w];
-				}
-				gamma_[d][k] = tmpGamma_dk;
-				nextGamma[k] = tmpGamma_dk;
+
 			}
 		}while(!diffGamma(lastGamma, nextGamma));
 	}
@@ -423,7 +406,6 @@ public class OnlineLDA2 {
 		}
 		return ret;
 	}
-
 
 	private boolean diffGamma(double[] lastGamma, double[] nextGamma) {
 		double diff = 0;
@@ -470,6 +452,7 @@ public class OnlineLDA2 {
 			System.out.println("==========================================");
 		}
 	}
+
 	private ArrayList<String> getSortedLambda(int k) {
 		ArrayList<String> ret = new ArrayList<String>();
 		ArrayList<IntDoubleTuple> compareList = new ArrayList<IntDoubleTuple>();
@@ -630,6 +613,7 @@ public class OnlineLDA2 {
 	}
 
 	public void trainMiniBatch(String[][] miniBatch, int time) {
+
 		D_ = miniBatch.length;
 		
 		rhot = Math.pow(tau0_ + time, -kappa_);
@@ -648,10 +632,10 @@ public class OnlineLDA2 {
 
 		// get ids and cts
 		getIdsCts(miniBatch);
-//		
+		
 //		// check
 		updateSizeOfParameterPerMiniBatch();
-//
+
 		for(int d=0; d<D_; d++){
 			// get ids and cts
 			do_e_step(d);
@@ -680,12 +664,3 @@ public class OnlineLDA2 {
 		}
 	}
 }
-
-
-
-
-
-
-
-
-
