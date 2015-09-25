@@ -31,14 +31,15 @@ public class ExecuteFormattedInputfile{
 //	static int limit = 10;
 
 	// LDA Parameters
-	static int K = 4;
+	static int K = 10;
 	static double alpha = 1./(K);
 	static double eta = 1./ (K);
 	static double tau0 = 80;	// 1024
 	static double kappa = 0.8;	// 0.7
 	static int IterNum = 1;
-	static int PPLNUM = 1;
-	static int totalD= (int)11000;
+	static int PPLNUM = 100;
+//	static int totalD= (int)11000;
+	static int totalD= 395 * PPLNUM;
 
 	// Control
 	static int limit = 10000;
@@ -50,7 +51,7 @@ public class ExecuteFormattedInputfile{
 	
 	public static void main(String[] args){
 		long start = System.nanoTime();
-		targetURI = "/Users/ishikawanaoki/dataset/news20_tdIdf.txt";
+		targetURI = "/Users/ishikawanaoki/dataset/reuters_tfidf.txt";
 		
 		onlineLDA2 = new OnlineLDA2(K, alpha, eta, totalD, tau0, kappa, batchSize_, stopWord);
 

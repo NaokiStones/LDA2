@@ -51,7 +51,7 @@ public class OnlineLDA2 {
 	private double SHAPE = 100d;
 	private double SCALE = 1d / SHAPE;
 	
-	private double DELTA = 1E-10;
+	private double DELTA = 1E-5;
 	
 	private double tau0_ = 1020;
 	private double kappa_= 0.7;
@@ -188,9 +188,12 @@ public class OnlineLDA2 {
 
 			for(int w=0; w<Nd; w++){
 				String[] labelValue = miniBatch[d][w].split(":");
+				if(labelValue.length==1){
+					continue;
+				}
 				String label = labelValue[0];
 				labels[w] = label;
-				Float value  = Float.parseFloat(labelValue[1]);
+				Float value  = (float)Double.parseDouble(labelValue[1]);
 				values[w] = value;
 
 				label = removeSymbol(label);
@@ -279,53 +282,45 @@ public class OnlineLDA2 {
 		return ret;
 	}
 
-	private void do_m_step(int d) {
-		
+	private void do_m_step(HashMap<Integer, Float> ntw) {
+		// calculate lambdaBar
 		HashMap<Integer, double[]> lambdaBar = new HashMap<Integer, double[]>();
 
-		double lambdaBar_kw = 0;
-
-		for(int w=0; w<Nds[d]; w++){
-			for(int k=0; k<K_; k++){
+		double multiplier = (tmpTotalD_ / D_);
+		for(int d=0; d<D_; d++){
+			for(int w=0; w<Nds[d]; w++){
 				int tmpId = ids[d][w];
-
-				lambdaBar_kw = eta_ + (tmpTotalD_ / D_) * cts[d][w] * phi_[d][w][k];
 				if(!lambdaBar.containsKey(tmpId)){
-					double[] tmpDArray = new double[K_];
-					Arrays.fill(tmpDArray, eta_);
-					tmpDArray[k] = lambdaBar_kw;
-					lambdaBar.put(tmpId, tmpDArray);
+					double[] tmp = new double[K_];
+					for(int k=0; k<K_; k++){
+						tmp[k] = eta_ + multiplier * phi_[d][w][k];
+					}
+					lambdaBar.put(tmpId, tmp);
 				}else{
-					double[] tmpDArray= lambdaBar.get(tmpId);
-					tmpDArray[k] = lambdaBar_kw;
-					lambdaBar.put(tmpId, tmpDArray);
+					double[] tmp = lambdaBar.get(tmpId);
+					for(int k=0; k<K_; k++){
+						tmp[k] += multiplier * phi_[d][w][k];
+					}
+					
 				}
 			}
 		}
 		
-		double oneMinusRhot = 1 - rhot;
-		for(int lambdaKey:lambda_.keySet()){
-			if(!lambdaBar.containsKey(lambdaKey)){
-				// TODO 
-				double[] lambdaW = lambda_.get(lambdaKey);
+		// update
+		double oneMinuxRhot = 1d - rhot;
+		for(int key:lambda_.keySet()){
+			double[] tmp = lambda_.get(key);
+			if(!lambdaBar.containsKey(key)){
 				for(int k=0; k<K_; k++){
-					lambdaW[k] = oneMinusRhot * lambdaW[k] + rhot * eta_;
+					tmp[k] = oneMinuxRhot * tmp[k] + rhot * eta_;
 				}
-				lambda_.put(lambdaKey, lambdaW);
 			}else{
-				double[] lambdaW = lambda_.get(lambdaKey);
-				double[] lambdaBarW = lambdaBar.get(lambdaKey);
+				double[] tmpLambda = lambda_.get(key);
 				for(int k=0; k<K_; k++){
-					lambdaW[k] = oneMinusRhot * lambdaW[k] + rhot * lambdaBarW[k];
+					tmp[k] = oneMinuxRhot * tmp[k] + rhot * tmpLambda[k];
 				}
-				lambda_.put(lambdaKey, lambdaW);
 			}
-		}
-
-		for(int b=0; b<dummySize; b++){
-			for(int k=0; k<K_; k++){
-				dummyLambdas[b][k] =  oneMinusRhot * dummyLambdas[b][k] + (1 - oneMinusRhot) * eta_;
-			}
+			lambda_.put(key, tmp);
 		}
 	}
 
@@ -380,11 +375,9 @@ public class OnlineLDA2 {
 				}
 				
 //				// TODO tmp
-//				for(int w=0; w<Nds[d]; w++){
-//					phi_[d][w][k]/= (tmpPhiSum);
-//				}
-				
-
+				for(int w=0; w<Nds[d]; w++){
+					phi_[d][w][k]/= (tmpPhiSum);
+				}
 			}
 		}while(!diffGamma(lastGamma, nextGamma));
 	}
@@ -633,16 +626,19 @@ public class OnlineLDA2 {
 		// get ids and cts
 		getIdsCts(miniBatch);
 		
+		HashMap<Integer, Float> ntw = new HashMap<Integer, Float>(); 
+		ntw = getNtw(ntw);
+		
 //		// check
 		updateSizeOfParameterPerMiniBatch();
+		
 
 		for(int d=0; d<D_; d++){
-			// get ids and cts
 			do_e_step(d);
-
-			// update Lambda
-			do_m_step(d);
 		}
+		
+		// DO M Step
+		do_m_step(ntw);
 		
 		if(printGamma){
 			System.out.println("Gamma:");
@@ -662,5 +658,19 @@ public class OnlineLDA2 {
 				}
 			}
 		}
+	}
+
+	private HashMap<Integer, Float> getNtw(HashMap<Integer, Float> ret) {
+		for(int d=0; d<D_; d++){
+			for(int w=0; w<Nds[d]; w++){
+				if(!ret.containsKey(ids[d][w])){
+					ret.put(ids[d][w], cts[d][w]);
+				}else{
+					float tmp = ret.get(ids[d][w]);
+					ret.put(ids[d][w], tmp + cts[d][w]);
+				}
+			}
+		}
+		return ret;
 	}
 }
